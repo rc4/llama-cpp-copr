@@ -14,16 +14,26 @@
 %bcond_without rpc
 %ifarch x86_64
 %bcond_without rocm
+%bcond_without cuda
 %else
 %bcond_with rocm
-%endif
-# Proprietary NVIDIA CUDA toolkit (requires external NVIDIA CUDA repo in COPR)
 %bcond_with cuda
+%endif
 # Optional full upstream CTest suite (smoke tests always run in %%check)
 %bcond_with tests
 
 %if %{with rocm}
-%{!?amdgpu_targets:%global amdgpu_targets %{?rocm_gpu_list_default}%{!?rocm_gpu_list_default:gfx906;gfx908;gfx90a;gfx942;gfx1030;gfx1100;gfx1101;gfx1102;gfx1150;gfx1151;gfx1200;gfx1201}}
+# Strip any embedded double quotes from %%rocm_gpu_list_default (which Fedora's
+# rocm-rpm-macros defines with literal outer quotes) so -DAMDGPU_TARGETS is
+# quoted cleanly once in %%cmake.
+%{!?amdgpu_targets:%global amdgpu_targets %{lua:
+local s = rpm.expand("%{?rocm_gpu_list_default}")
+if s == "" then
+    s = "gfx906;gfx908;gfx90a;gfx942;gfx1030;gfx1100;gfx1101;gfx1102;gfx1150;gfx1151;gfx1200;gfx1201"
+end
+s = s:gsub('"', '')
+print(s)
+}}
 %endif
 
 Name:           llama-cpp
@@ -227,7 +237,7 @@ export PATH="${PATH}:/usr/local/cuda/bin"
 %endif
 %if %{with cuda}
     -DGGML_CUDA=ON \
-    -DCMAKE_CUDA_FLAGS="-Xcompiler -fPIC" \
+    -DCMAKE_CUDA_FLAGS="-Xcompiler -fPIC -allow-unsupported-compiler" \
     %{?cuda_archs:-DCMAKE_CUDA_ARCHITECTURES="%{cuda_archs}"} \
 %endif
     %{nil}
